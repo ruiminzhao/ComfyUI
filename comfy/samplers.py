@@ -919,7 +919,8 @@ class CFGGuider:
         return sampling_function(self.inner_model, x, timestep, self.conds.get("negative", None), self.conds.get("positive", None), self.cfg, model_options=model_options, seed=seed)
 
     def inner_sample(self, noise, latent_image, device, sampler, sigmas, denoise_mask, callback, disable_pbar, seed):
-        if latent_image is not None and torch.count_nonzero(latent_image) > 0: #Don't shift the empty latent image.
+        print(device)
+        if latent_image is not None and torch.count_nonzero(latent_image) > 0: #Don't shift the empty latent image. 
             latent_image = self.inner_model.process_latent_in(latent_image)
 
         self.conds = process_conds(self.inner_model, noise, self.conds, device, latent_image, denoise_mask, seed)

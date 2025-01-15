@@ -668,7 +668,10 @@ def unet_dtype(device=None, model_params=0, supported_dtypes=[torch.float16, tor
         if model_params * 2 > free_model_memory:
             return fp8_dtype
 
+    print(supported_dtypes)
+    
     for dt in supported_dtypes:
+        print(dt)
         if dt == torch.float16 and should_use_fp16(device=device, model_params=model_params):
             if torch.float16 in supported_dtypes:
                 return torch.float16
@@ -992,10 +995,16 @@ def is_device_mps(device):
 
 def is_device_cuda(device):
     return is_device_type(device, 'cuda')
+    
+def is_directml_enabled():
+    global directml_enabled
+    if directml_enabled:
+        return True
+    return False
 
 def should_use_fp16(device=None, model_params=0, prioritize_performance=True, manual_cast=False):
     global directml_enabled
-
+    print(FORCE_FP16)
     if device is not None:
         if is_device_cpu(device):
             return False
