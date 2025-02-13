@@ -49,6 +49,52 @@ def cast_bias_weight(s, input=None, dtype=None, device=None, bias_dtype=None):
         weight = s.weight_function(weight)
     return weight, bias
 
+def quantize_to_int4(tensor, scale, zero_point): 
+    """ 
+    Quantizes a tensor to 4-bit integers. 
+  
+    Args:  
+        tensor (torch.Tensor): The tensor to quantize. 
+        scale (float): The scale factor for quantization. 
+        zero_point (int): The zero point for quantization. 
+  
+    Returns:  
+        torch.Tensor: The quantized tensor stored in an int8 tensor. 
+    """ 
+    qmin = -8 # For signed int4 
+    qmax = 7 
+    tensor = tensor / scale + zero_point 
+    tensor = tensor.clamp(qmin, qmax).round() 
+    return tensor.to(torch.int8) # Stored as int8 since PyTorch does not support int4 directly 
+
+def dequantize_int4(tensor_q, scale, zero_point): 
+    """ 
+    Dequantizes a tensor from 4-bit integers back to float. 
+  
+    Args: 
+        tensor_q (torch.Tensor): The quantized tensor. 
+        scale (float): The scale factor used during quantization. 
+        zero_point (int): The zero point used during quantization. 
+  
+    Returns: 
+        torch.Tensor: The dequantized tensor. 
+    """ 
+    return scale * (tensor_q.float() - zero_point) 
+
+def calculate_scale_zero_point(tensor):  
+    qmin = -8 
+    qmax = 7 
+    min_val = tensor.min() 
+    max_val = tensor.max() 
+  
+    # Compute scale and zero_point 
+    scale = (max_val - min_val) / (qmax - qmin) 
+    scale = max(scale, 1e-8) 
+    zero_point = qmin - min_val / scale 
+    zero_point = int(zero_point) 
+    zero_point = int(round(zero_point)) 
+    return scale, zero_point
+
 class CastWeightBiasOp:
     comfy_cast_weights = False
     weight_function = None
@@ -61,7 +107,22 @@ class disable_weight_init:
 
         def forward_comfy_cast_weights(self, input):
             weight, bias = cast_bias_weight(self, input)
-            return torch.nn.functional.linear(input, weight, bias)
+            #ooxx int4 quantization
+            # Quantize weight 
+            scale, zero_point = calculate_scale_zero_point(weight) 
+            weight_q = quantize_to_int4(weight, scale, zero_point)
+            # Dequantize weight
+            weight_dq = dequantize_int4(weight_q, scale, zero_point)
+
+            # Quantize input
+            scale_input, zero_point_input = calculate_scale_zero_point(input)
+            input_q = quantize_to_int4(input, scale_input, zero_point_input)
+            # Dequantize input 
+            input_dq = dequantize_int4(input_q, scale_input, zero_point_input)
+
+            return torch.nn.functional.linear(input_dq, weight_dq, bias) 
+            #ooxx int4 quantization
+            #return torch.nn.functional.linear(input, weight, bias)
 
         def forward(self, *args, **kwargs):
             if self.comfy_cast_weights:
