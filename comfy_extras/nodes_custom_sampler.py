@@ -5,7 +5,7 @@ import latent_preview
 import torch
 import comfy.utils
 import node_helpers
-
+import time
 
 class BasicScheduler:
     @classmethod
@@ -491,6 +491,7 @@ class SamplerCustom:
         callback = latent_preview.prepare_callback(model, sigmas.shape[-1] - 1, x0_output)
 
         disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
+        
         samples = comfy.sample.sample_custom(model, noise, cfg, sampler, sigmas, positive, negative, latent_image, noise_mask=noise_mask, callback=callback, disable_pbar=disable_pbar, seed=noise_seed)
 
         out = latent.copy()
@@ -634,6 +635,7 @@ class SamplerCustomAdvanced:
     CATEGORY = "sampling/custom_sampling"
 
     def sample(self, noise, guider, sampler, sigmas, latent_image):
+        execution_start_time = time.perf_counter() 
         latent = latent_image
         latent_image = latent["samples"]
         latent = latent.copy()
@@ -648,8 +650,21 @@ class SamplerCustomAdvanced:
         callback = latent_preview.prepare_callback(guider.model_patcher, sigmas.shape[-1] - 1, x0_output)
 
         disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
-        samples = guider.sample(noise.generate_noise(latent), latent_image, sampler, sigmas, denoise_mask=noise_mask, callback=callback, disable_pbar=disable_pbar, seed=noise.seed)
-        samples = samples.to(comfy.model_management.intermediate_device())
+
+        from torch.profiler import profile, record_function, ProfilerActivity
+        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.PrivateUse1, ProfilerActivity.CUDA],
+                record_shapes=True,
+                profile_memory=True, # Track memory allocation
+                with_stack=True) as prof:
+            with record_function("model_inference"):        
+                samples = guider.sample(noise.generate_noise(latent), latent_image, sampler, sigmas, denoise_mask=noise_mask, callback=callback, disable_pbar=disable_pbar, seed=noise.seed)
+                samples = samples.to(comfy.model_management.intermediate_device())
+
+        # Print profiling results
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+
+        # Export to Chrome trace format
+        prof.export_chrome_trace("trace.json")
 
         out = latent.copy()
         out["samples"] = samples
@@ -658,6 +673,12 @@ class SamplerCustomAdvanced:
             out_denoised["samples"] = guider.model_patcher.model.process_latent_out(x0_output["x0"].cpu())
         else:
             out_denoised = out
+        current_time = time.perf_counter()
+        
+        execution_time = current_time - execution_start_time
+        print("OOXX time")
+        print(execution_time)
+        print("OOXX time")
         return (out, out_denoised)
 
 class AddNoise:
