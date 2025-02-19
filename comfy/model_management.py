@@ -138,7 +138,14 @@ def get_total_memory(dev=None, torch_total_too=False):
         mem_total_torch = mem_total
     else:
         if directml_enabled:
-            mem_total = 1024 * 1024 * 1024 #TODO
+            from fix_torch import fix_pytorch_dml_memory_report
+            memory_dll = fix_pytorch_dml_memory_report()
+            if memory_dll is not None:
+                mem_total = memory_dll.GetTotalGpuMemory()
+            else:
+                mem_total = 1024 * 1024 * 1024
+            print("Total VRAM (bytes):", mem_total)
+            print("Total VRAM (MB):", mem_total / (1024*1024))
             mem_total_torch = mem_total
         elif is_intel_xpu():
             stats = torch.xpu.memory_stats(dev)
@@ -941,7 +948,14 @@ def get_free_memory(dev=None, torch_free_too=False):
         mem_free_torch = mem_free_total
     else:
         if directml_enabled:
-            mem_free_total = 1024 * 1024 * 1024 #TODO
+            from fix_torch import fix_pytorch_dml_memory_report
+            memory_dll = fix_pytorch_dml_memory_report()
+            if memory_dll is not None:
+                mem_free_total = memory_dll.GetAvailableGpuMemory()
+            else:
+                mem_free_total = 1024 * 1024 * 1024
+            print("Available VRAM (bytes):", mem_free_total)
+            print("Available VRAM (MB):", mem_free_total / (1024*1024))
             mem_free_torch = mem_free_total
         elif is_intel_xpu():
             stats = torch.xpu.memory_stats(dev)
